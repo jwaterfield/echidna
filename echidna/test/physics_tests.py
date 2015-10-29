@@ -9,7 +9,7 @@ Example:
 import numpy
 
 
-def test_function_float(function, expected, tolerance=0.001, **kwargs):
+def test_function_float(function, expected, tolerance=0.0027, **kwargs):
     """ Tests a function that returns a physics result (float)
 
     Args:
@@ -18,7 +18,7 @@ def test_function_float(function, expected, tolerance=0.001, **kwargs):
       expected (float): Expected physics result of function.
       tolerance (float, optional): Tolerance in agreement of results.
         Evaluated as :obj:`tolerance*expected`, i.e. a tolerance of
-        0.001 ensures agreement to within 0.1% of expected value.
+        0.0027 ensures agreement to within three sigma of expected value.
       \**kwargs: Keyword arguments to pass to the function
 
     Returns:
