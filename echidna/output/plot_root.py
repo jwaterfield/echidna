@@ -60,12 +60,12 @@ def plot_surface(spectra, dimension1, dimension2, graphical=True):
     for index_x, data_x in enumerate(data):
         for index_y, datum in enumerate(data_x):
             plot.SetBinContent(index_x + 1, index_y + 1, datum)
-    can = TCanvas("Figure " + str(fig_num), "Figure " + str(fig_num))
-    if graphical:
-        can.cd()
-        plot.Draw("COLZ")
-        raw_input("Return to quit")
-    return plot, can
+    #can = TCanvas("Figure " + str(fig_num), "Figure " + str(fig_num))
+    #if graphical:
+        #can.cd()
+        #plot.Draw("COLZ")
+        #raw_input("Return to quit")
+    return plot#, can
 
 
 def spectral_plot(spectra_dict, dimension="energy", show_plot=False,

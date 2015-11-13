@@ -310,6 +310,7 @@ class Fit(object):
         for spectrum, scaling in spectra_dict.iteritems():
             # Copy so original spectra is unchanged
             spectrum = copy.deepcopy(spectrum)
+            print spectrum._name
             if first:
                 first = False
                 if shrink:
