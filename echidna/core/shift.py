@@ -5,11 +5,14 @@ import numpy
 class Shift(object):
     """ A class for shifting the parameter space of a spectra.
 
+    Args:
+      shift (float): Initial value you wish to set the shift factor to.
+
     Attributes:
       _shift (float): The factor you want to shift a parameter by.
     """
 
-    def __init__(self):
+    def __init__(self, shift=None):
         """ Initialise the Shift class.
         """
         self._shift = 0.
@@ -42,8 +45,25 @@ class Shift(object):
         Returns:
           :class:`echidna.core.spectra.Spectra`: The shifted spectrum.
         """
-        shift = self.get_shift()
-        step = spectrum.get_config().get_par(dimension).get_width()
+        shift = self._shift
+        if self._shift is None:
+            raise AttributeError("Value of _shift attribute must be set "
+                                 "before using this method")
+        par = spectrum.get_config().get_par(dimension)
+        step = par.get_width()
+        low = par._low
+        high = par._high
+        n_bins = par._bins
+
+        # Check not shifting completely out of range, for dimension
+        if low + shift >= high:
+            raise ValueError("Shift %f shifts all data above maximum value, "
+                             "for range %f to %f in dimension %s" %
+                             (shift, low, high, dimension))
+        if high + shift <= low:
+            raise ValueError("Shift %f shifts all data below minimum value, "
+                             "for range %f to %f in dimension %s" %
+                             (shift, low, high, dimension))
         if numpy.isclose(shift % step, 0.) or numpy.isclose(shift % step,
                                                             step):
             # shift size multiple of step size. Interpolation not required.
@@ -56,10 +76,6 @@ class Shift(object):
                                        spectrum.get_config())
         n_dim = len(spectrum._data.shape)
         axis = spectrum.get_config().get_index(dimension)
-        par = spectrum.get_config().get_par(dimension)
-        low = par._low
-        high = par._high
-        n_bins = par._bins
         for bin in range(n_bins):
             x = low + (bin + 0.5) * step
             if (x - shift) < low or (x - shift) > high:
