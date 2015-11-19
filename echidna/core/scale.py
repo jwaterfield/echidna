@@ -63,13 +63,15 @@ class Scale(object):
         step = par.get_width()
         for bin in range(n_bins):
             x = par.get_bin_centre(bin)
+            old_bin1 = par.get_bin(x/sf)
+            old_bin_centre1 = par.get_bin_centre(old_bin1)
             if x/sf < low or x/sf > high:
                 continue  # Trying to scale values outside range (Unknown)
             y = interpolation(x/sf)
             if y <= 0.:
                 continue
-            old_bin1 = par.get_bin(x/sf)
-            old_bin_centre1 = par.get_bin_centre(old_bin1)
+            if numpy.isnan(y):
+                y = spectrum.project(dimension)[old_bin1]
             if par.get_bin_centre(old_bin1) > x/sf:
                 old_bin2 = old_bin1 - 1
                 if old_bin2 >= 0:
