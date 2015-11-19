@@ -58,11 +58,12 @@ class Scale(object):
         axis = spectrum.get_config().get_index(dimension)
         par = spectrum.get_config().get_par(dimension)
         low = par._low
+        high = par._high
         n_bins = par._bins
         step = par.get_width()
         for bin in range(n_bins):
             x = par.get_bin_centre(bin)
-            if x/sf < low or x/sf > par._high:
+            if x/sf < low or x/sf > high:
                 continue  # Trying to scale values outside range (Unknown)
             y = interpolation(x/sf)
             if y <= 0.:
@@ -74,9 +75,14 @@ class Scale(object):
                 if old_bin2 >= 0:
                     x_low1 = old_bin_centre1 - 0.5*step  # Equals x_high2
                     x_high1 = x/sf + 0.5*step
-                    area1 = numpy.fabs(0.5 * (x_high1 - x_low1) *
-                                       (interpolation(x_high1) +
-                                        interpolation(x_low1)))
+                    if x_high1 > high - 0.5*step:
+                        # Assume uniform distribution in last bin
+                        area1 = (x_high1 - x_low1) * \
+                            spectrum.project(dimension)[-1]
+                    else:
+                        area1 = numpy.fabs(0.5 * (x_high1 - x_low1) *
+                                           (interpolation(x_high1) +
+                                            interpolation(x_low1)))
                     x_low2 = x/sf - 0.5*step
                     area2 = numpy.fabs(0.5 * (x_low1 - x_low2) *
                                        (interpolation(x_low1) +
@@ -90,9 +96,14 @@ class Scale(object):
                 if old_bin2 < n_bins:
                     x_low1 = x/sf - 0.5*step
                     x_high1 = old_bin_centre1 + 0.5*step  # Equals x_low2
-                    area1 = numpy.fabs(0.5 * (x_high1 - x_low1) *
-                                       (interpolation(x_high1) +
-                                        interpolation(x_low1)))
+                    if x_low1 < low + 0.5*step:
+                        # Assume uniform distribution in first bin
+                        area1 = (x_high1-x_low1) * \
+                            spectrum.project(dimension)[0]
+                    else:
+                        area1 = numpy.fabs(0.5 * (x_high1 - x_low1) *
+                                           (interpolation(x_high1) +
+                                            interpolation(x_low1)))
                     x_high2 = x/sf + 0.5*step
                     area2 = numpy.fabs(0.5 * (x_high2 - x_high1) *
                                        (interpolation(x_high2) +
