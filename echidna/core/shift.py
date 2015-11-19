@@ -44,7 +44,8 @@ class Shift(object):
         """
         shift = self.get_shift()
         step = spectrum.get_config().get_par(dimension).get_width()
-        if numpy.isclose(shift % step, 0.):
+        if numpy.isclose(shift % step, 0.) or numpy.isclose(shift % step,
+                                                            step):
             # shift size multiple of step size. Interpolation not required.
             return self.shift_by_bin(spectrum, dimension)
         preshift_sum = spectrum.sum()
@@ -171,7 +172,8 @@ class Shift(object):
         """
         shift = self.get_shift()
         step = spectrum.get_config().get_par(dimension).get_width()
-        if not numpy.isclose(shift % step, 0.):
+        if not numpy.isclose(shift % step, 0.) and not numpy.isclose(
+            shift % step, step):
             raise ValueError("Shift (%s) must be a multiple of bin width (%s)"
                              % (shift, step))
         shifted_spec = spectra.Spectra(spectrum._name+"_shift" +
