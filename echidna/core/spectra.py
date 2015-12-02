@@ -145,7 +145,7 @@ class SpectraParameter(object):
         if x < self._low:
             raise ValueError("%s is below parameter lower bound %s"
                              % (x, self._low))
-        if x > self._high:
+        if x >= self._high:
             raise ValueError("%s is above parameter upper bound %s"
                              % (x, self._high))
         return int((x - self._low) / self.get_width())

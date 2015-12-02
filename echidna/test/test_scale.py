@@ -23,11 +23,13 @@ class TestScale(unittest.TestCase):
         sigma = np.fabs(sigma)
         return A*np.exp(-(x-mean)**2/(2.*sigma**2))
 
-    def fit_gaussian_energy(self, spectra):
+    def fit_gaussian_energy(self, spectra, exp_mean, exp_sigma):
         """ Fits a gausian to the energy of a spectrum.
 
         Args:
           spectra (core.spectra): Spectrum to be fitted
+          exp_mean (float): Expected mean from the fit
+          exp_sigma (float): Expected sigma from the fit
 
         Returns:
           tuple: mean (float), sigma (float) and
@@ -41,7 +43,7 @@ class TestScale(unittest.TestCase):
         for i in range(len(spectra_proj)):
             entries.append(spectra_proj[i])
             energies.append(energy_low+energy_width*(i+0.5))
-        pars0 = [300., 2.5, 0.1]
+        pars0 = [300., exp_mean, exp_sigma]
         coeff, var_mtrx = curve_fit(self.gaussian, energies, entries, p0=pars0)
         return coeff[1], np.fabs(coeff[2]), np.array(entries).sum()
 
@@ -69,15 +71,17 @@ class TestScale(unittest.TestCase):
                 test_spectra.get_config().get_par("radial_mc")._high
             test_spectra.fill(energy_mc=energy, radial_mc=radius)
         mean_energy, sigma_energy, integral = self.fit_gaussian_energy(
-            test_spectra)
+            test_spectra, mean_energy, sigma_energy)
         scaler = scale.Scale()
         self.assertRaises(ValueError, scaler.set_scale_factor, -1.1)
         scale_factor = 1.1
         scaler.set_scale_factor(scale_factor)
         scaled_spectra = scaler.scale(test_spectra, "energy_mc")
-        mean, sigma, integral = self.fit_gaussian_energy(scaled_spectra)
         expected_mean = mean_energy*scale_factor
         expected_sigma = sigma_energy*scale_factor
+        mean, sigma, integral = self.fit_gaussian_energy(scaled_spectra,
+                                                         expected_mean,
+                                                         expected_sigma)
         self.assertTrue(expected_mean < 1.01*mean and
                         expected_mean > 0.99*mean,
                         msg="Expected mean energy %s, fitted mean energy %s"
@@ -89,3 +93,4 @@ class TestScale(unittest.TestCase):
         self.assertAlmostEqual(scaled_spectra.sum()/float(test_decays), 1.0,
                                msg="Input decays %s, integral of spectra %s"
                                % (test_decays, scaled_spectra.sum()))
+
