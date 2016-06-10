@@ -180,6 +180,7 @@ class FitParameter(Parameter):
         test in fit.
       _best_fit (float): Best-fit value calculated by fit.
       _penalty_term (float): Penalty term value at best fit.
+      _pre_made (bool): Loads pre made spectra if set to True.
       _logscale (bool): Flag to create an logscale array of values,
         rather than a linear array.
       _base (float): Base to use when creating an logscale array.
@@ -193,7 +194,7 @@ class FitParameter(Parameter):
 
     def __init__(self, name, prior, sigma, low, high, bins, dimension=None,
                  values=None, current_value=None, penalty_term=None,
-                 best_fit=None, logscale=None, base=numpy.e,
+                 best_fit=None, pre_made=False, logscale=None, base=numpy.e,
                  logscale_deviation=None):
         """Initialise FitParameter class
         """
@@ -210,6 +211,7 @@ class FitParameter(Parameter):
         self._current_value = current_value
         self._best_fit = best_fit
         self._penalty_term = penalty_term
+        self._pre_made = pre_made
         self._logscale = None
         self._base = None
         self._logscale_deviation = None

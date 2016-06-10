@@ -427,7 +427,8 @@ class GlobalFitConfig(Config):
                         "sigma": <sigma>,
                         "low": <low>,
                         "high": <high>,
-                        "bins": <bins>}}}}
+                        "bins": <bins>,
+                        "pre_load": <True/False>}}}}
 
         For spectral config see :meth:`SpectralFitConfig.load`.
 

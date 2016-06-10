@@ -1,6 +1,6 @@
 import echidna.output.store as store
 from echidna.fit.minimise import GridSearch
-from echidna.errors.custom_errors import CompatibilityError
+from echidna.errors.custom_errors import CompatibilityError, ParameterError
 from echidna.core.config import GlobalFitConfig
 
 import numpy
@@ -9,6 +9,7 @@ import collections
 import os
 import yaml
 import copy
+from memory_profiler import profile
 
 
 class Fit(object):
@@ -41,8 +42,6 @@ class Fit(object):
         the ROI.
       minimiser (:class:`echidna.limit.minimiser.Minimiser`, optional): Object
         to handle the minimisation.
-      use_pre_made (bool, optional): Flag whether to load a pre-made spectrum
-        for each systematic value, or apply convolutions on the fly.
       pre_made_dir (string, optional): Directory in which pre-made convolved
         spectra are stored.
       single_bin (bool, optional): Flag for a single bin fit (e.g. simple
@@ -70,15 +69,13 @@ class Fit(object):
       _minimiser (:class:`echidna.limit.minimiser.Minimiser)`: Object to
         handle the minimisation.
       _checked (bool): If True then the fit class is ready to be used.
-      _use_pre_made (bool): Flag whether to load a pre-made spectrum
-        for each systematic value, or apply convolutions on the fly.
       _pre_made_dir (string): Directory in which pre-made convolved
         spectra are stored.
     """
     def __init__(self, roi, test_statistic, fit_config=None, data=None,
                  fixed_backgrounds=None, floating_backgrounds=None,
                  signal=None, shrink=True, per_bin=False, minimiser=None,
-                 use_pre_made=False, pre_made_base_dir=None, single_bin=False):
+                 pre_made_base_dir=None, single_bin=False):
         self._logger = logging.getLogger("Fit")
         self._checked = False
         self.set_roi(roi)
@@ -87,7 +84,7 @@ class Fit(object):
 
         if not fit_config:
             parameters = collections.OrderedDict({})
-            fit_config = GlobalFitConfig("gloabl_fit_config", parameters)
+            fit_config = GlobalFitConfig("global_fit_config", parameters)
         self.set_fit_config(fit_config)
 
         if data:
@@ -146,7 +143,6 @@ class Fit(object):
             self._minimiser = None
             self._logger.warning("Minimiser could not be set because: %s" %
                                  detail)
-        self._use_pre_made = use_pre_made
         self._pre_made_base_dir = pre_made_base_dir
         self._single_bin = single_bin
 
@@ -444,6 +440,7 @@ class Fit(object):
                 raise AttributeError("Minimiser is not set.")
             return self._minimiser.minimise(self._funct, self._test_statistic)
 
+    @profile
     def _funct(self, *args):
         """ Callable to pass to minimiser.
 
@@ -462,6 +459,8 @@ class Fit(object):
         Raises:
           ValueError: If :attr:`_floating_backgrounds` is None. This
             method requires at least one floating background.
+          ParameterError: If it is attempted to load a pre-made spectrum
+            after other fit parameters have been applied to the spectrum.
 
         .. note:: This method should not be called directly, it is
           intended to be passed to an appropriate minimiser and
@@ -490,21 +489,44 @@ class Fit(object):
         cur_val = ""
         for parameter in global_pars:
             cur_val += parameter._name + str(parameter._current_value) + "_"
+        print cur_val
         for spectrum, floating_pars in zip(self._floating_backgrounds,
                                            self._floating_pars):
             # Apply global parameters first
+            print "applying systs to", spectrum._name
             if global_pars:
                 background_name = spectrum.get_background_name()
                 if background_name not in self._global_dict:
                     self._global_dict[background_name] = {}
                 if cur_val not in self._global_dict[background_name]:
                     fit_config = spectrum._fit_config
-                    if self._use_pre_made:  # Load pre-made spectrum from file
-                        spectrum = self.load_pre_made(spectrum, global_pars)
-                    else:
-                        for parameter in global_pars:
+                    applied = False
+                    load = False
+                    load_pars = []
+                    for parameter in global_pars:
+                        if parameter._pre_made:  # Load pre-made spectrum
+                            if applied:
+                                raise ParameterError(
+                                    "Trying to load pre-made after a "
+                                    "parameter has been applied. Rearrange "
+                                    "parameter order in config.")
+                            load_pars.append(parameter)
+                            load = True
+                        else:
+                            applied = True
+                            if load:
+                                spectrum = self.load_pre_made(spectrum,
+                                                              load_pars)
+                                load = False
                             spectrum = parameter.apply_to(spectrum)
+                    if load:
+                        spectrum = self.load_pre_made(spectrum,
+                                                      load_pars)
                     spectrum._fit_config = fit_config
+                    # Shrink to roi
+                    self.shrink_to_data(spectrum)
+                    # rebin
+                    spectrum.rebin(self._data._data.shape)
                     self._global_dict[background_name][cur_val] = spectrum
                 else:
                     spectrum = self._global_dict[background_name][cur_val]
@@ -516,11 +538,6 @@ class Fit(object):
                     spectrum = parameter.apply_to(spectrum)
 
             # Spectrum should now be fully convolved/scaled
-            # Shrink to roi
-            self.shrink_to_data(spectrum)
-            # rebin
-            spectrum.rebin(self._data._data.shape)
-            # and then add projection to expected spectrum
             if expected is not None:
                 expected += spectrum.nd_project(floating_pars)
             else:
@@ -535,18 +552,43 @@ class Fit(object):
                     self._global_dict[background_name] = {}
                 if cur_val not in self._global_dict[background_name]:
                     fit_config = self._signal._fit_config
-                    if self._use_pre_made:  # Load pre-made spectrum from file
+                    applied = False
+                    load = False
+                    load_pars = []
+                    signal = None
+                    for parameter in global_pars:
+                        if parameter._pre_made:  # Load pre-made spectrum
+                            if applied:
+                                raise ParameterError(
+                                    "Trying to load pre-made after a "
+                                    "parameter has been applied. Rearrange "
+                                    "parameter order in config.")
+                            load_pars.append(parameter)
+                            load = True
+                        else:
+                            applied = True
+                            if load:
+                                signal = self.load_pre_made(self._signal,
+                                                            load_pars)
+                                load = False
+                            if signal:
+                                signal = parameter.apply_to(signal)
+                            else:
+                                signal = parameter.apply_to(self._signal)
+                    if load:
+                        if applied:
+                            raise ParameterError(
+                                "Trying to load pre-made after a parameter "
+                                "has been applied. Rearrange parameter order "
+                                "in config.")
                         signal = self.load_pre_made(self._signal,
-                                                    global_pars)
-                    else:
-                        for parameter in global_pars:
-                            signal = parameter.apply_to(self._signal)
+                                                    load_pars)
                     signal._fit_config = fit_config
+                    self.shrink_to_data(signal)
+                    signal.rebin(self._data._data.shape)
                     self._global_dict[background_name][cur_val] = signal
                 else:
                     signal = self._global_dict[background_name][cur_val]
-                self.shrink_to_data(signal)
-                signal.rebin(self._data._data.shape)
                 signal.scale(num_decays)
             else:
                 signal = self._signal

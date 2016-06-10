@@ -388,6 +388,9 @@ class Spectra(object):
         Args:
           num_decays (float): Number of decays this spectra should represent.
         """
+        if self._data.sum() == 0.:
+            self._num_decays = float(num_decays)
+            return
         self._data = numpy.multiply(self._data, num_decays / self._num_decays)
         # Make sure self._num_decays stays as a float
         self._num_decays = float(num_decays)
