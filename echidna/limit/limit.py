@@ -23,9 +23,13 @@ class Limit(object):
         to obtain a limit for.
       fitter (:class:`echidna.limit.fit.Fit`): The fitter used to set a
         a limit with.
+      signal_config (:class:`echidna.core.config.Config`, optional): If None
+        then the config from the signal arg is used.
       shrink (bool, optional): If set to True, :meth:`shrink` method is
         called on the signal spectrum before limit setting, shrinking to
         ROI.
+      store_all (bool, optional): If set to True, all fit results for all
+        signal scales are stored.
 
     Attributes:
       _logger (:class:`logging.Logger`): The output logger.
@@ -36,7 +40,8 @@ class Limit(object):
       _limit_results (:class:`echidna.fit.fit_results.LimitResults`): Limit
         results instance to report limit fit results
     """
-    def __init__(self, signal, fitter, shrink=True, store_all=False):
+    def __init__(self, signal, fitter, signal_config=None,
+                 shrink=True, store_all=False):
         self._logger = logging.getLogger(name="Limit")
         self._fitter = fitter
         self._fitter.check_fit_config(signal)
@@ -46,7 +51,8 @@ class Limit(object):
         name = signal.get_name() + "_limit_fit_config"
         limit_config = signal.get_fit_config()
         fitter_config = fitter.get_fit_config()
-        signal_config = signal.get_config()
+        if not signal_config:
+            signal_config = signal.get_config()
         name = signal.get_name() + "_limit_results"
         self._limit_results = LimitResults(fitter_config, signal_config,
                                            limit_config, name)

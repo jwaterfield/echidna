@@ -9,7 +9,6 @@ import collections
 import os
 import yaml
 import copy
-from memory_profiler import profile
 
 
 class Fit(object):
@@ -440,7 +439,6 @@ class Fit(object):
                 raise AttributeError("Minimiser is not set.")
             return self._minimiser.minimise(self._funct, self._test_statistic)
 
-    @profile
     def _funct(self, *args):
         """ Callable to pass to minimiser.
 
@@ -489,11 +487,9 @@ class Fit(object):
         cur_val = ""
         for parameter in global_pars:
             cur_val += parameter._name + str(parameter._current_value) + "_"
-        print cur_val
         for spectrum, floating_pars in zip(self._floating_backgrounds,
                                            self._floating_pars):
             # Apply global parameters first
-            print "applying systs to", spectrum._name
             if global_pars:
                 background_name = spectrum.get_background_name()
                 if background_name not in self._global_dict:
@@ -683,7 +679,7 @@ class Fit(object):
             # Copy so original spectra is unchanged
             self._logger.debug("Adding Spectra with name %s to"
                                "_fixed_background" % spectrum.get_name())
-            spectrum = copy.copy(spectrum)
+            spectrum = copy.deepcopy(spectrum)
             if first:
                 first = False
                 if shrink:
@@ -756,14 +752,12 @@ class Fit(object):
         self._fixed_background = fixed_background
         self._fixed_pars = self.get_roi_pars(fixed_background)
 
-    def set_floating_backgrounds(self, floating_backgrounds, shrink=True):
+    def set_floating_backgrounds(self, floating_backgrounds):
         """ Sets the floating backgrounds you want to fit.
 
         Args:
           floating_backgrounds (list): List of backgrounds you want to float
             in the fit.
-          shrink (bool, optional): If set to True (default), :meth:`shrink`
-            method is called on the spectra shrinking it to the ROI.
         """
         floating_pars = []
         for background in floating_backgrounds:
@@ -773,10 +767,6 @@ class Fit(object):
                 self.check_fit_config(background)
                 # Spectrum has a valid fit config, add to GlobalFit Config
                 self._fit_config.add_config(background.get_fit_config())
-            if shrink:
-                self.shrink_spectra(background)
-            else:
-                self.check_spectra(background)
             floating_pars.append(self.get_roi_pars(background))
         self._floating_backgrounds = floating_backgrounds
         self._floating_pars = floating_pars
