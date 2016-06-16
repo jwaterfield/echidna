@@ -501,6 +501,7 @@ class GlobalFitConfig(Config):
             containing the parameters in the file called filename.
         """
         config = yaml_loader.ordered_load(open(filename, 'r'))
+        print config
         if sf_filename:
             spectral_fit_config = yaml_loader.ordered_load(
                 open(sf_filename, "r"))

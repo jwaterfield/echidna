@@ -193,8 +193,9 @@ class FitParameter(Parameter):
     """
 
     def __init__(self, name, prior, sigma, low, high, bins, dimension=None,
-                 values=None, current_value=None, penalty_term=None,
-                 best_fit=None, pre_made=False, logscale=None, base=numpy.e,
+                 values=None, step=None, current_value=None,
+                 penalty_term=None, best_fit=None, best_fit_error=0.,
+                 pre_made=False, logscale=None, base=numpy.e,
                  logscale_deviation=None):
         """Initialise FitParameter class
         """
@@ -206,10 +207,12 @@ class FitParameter(Parameter):
                 "Setting sigma explicitly as None for %s - "
                 "No penalty term will be added for this parameter!" % name)
         self._sigma = sigma
+        self._step = step
         self._dimension = dimension
         self._values = values
         self._current_value = current_value
         self._best_fit = best_fit
+        self._best_fit_error = best_fit_error
         self._penalty_term = penalty_term
         self._pre_made = pre_made
         self._logscale = None
@@ -369,6 +372,16 @@ class FitParameter(Parameter):
                                                       self._bins + 1)
         return self._bin_boundaries
 
+    def get_best_fit(self):
+        """
+        """
+        return self._best_fit
+
+    def get_best_fit_error(self):
+        """
+        """
+        return self._best_fit_error
+
     def get_current_value(self):
         """
         Returns:
@@ -527,6 +540,14 @@ class FitParameter(Parameter):
         """
         self._best_fit = best_fit
 
+    def set_best_fit_error(self, best_fit_error):
+        """ Set value for :attr:`_best_fit_error`.
+
+        Args:
+          best_fit_error (float): Best fit value for parameter
+        """
+        self._best_fit_error = best_fit_error
+
     def set_current_value(self, value):
         """ Set value for :attr:`_current_value`.
 
@@ -632,6 +653,7 @@ class FitParameter(Parameter):
         # Add non-basic attributes
         parameter_dict["current_value"] = self._current_value
         parameter_dict["best_fit"] = self._best_fit
+        parameter_dict["best_fit_error"] = self._best_fit_error
         parameter_dict["penalty_term"] = self._best_fit
         return parameter_dict
 

@@ -1,5 +1,5 @@
 import echidna.output.store as store
-from echidna.fit.minimise import GridSearch
+from echidna.fit.minimise import GridSearch, Minuit
 from echidna.errors.custom_errors import CompatibilityError, ParameterError
 from echidna.core.config import GlobalFitConfig
 
@@ -437,9 +437,14 @@ class Fit(object):
         else:  # Pass to minimiser
             if self._minimiser is None:
                 raise AttributeError("Minimiser is not set.")
-            return self._minimiser.minimise(self._funct, self._test_statistic)
+            if type(self._minimiser) is GridSearch:
+                return self._minimiser.minimise(self._funct_grid,
+                                                self._test_statistic)
+            elif type(self._minimiser) is Minuit:
+                return self._minimiser.minimise(self._funct_root,
+                                                self._test_statistic)
 
-    def _funct(self, *args):
+    def _funct_grid(self, *args):
         """ Callable to pass to minimiser.
 
         Args:
@@ -616,6 +621,154 @@ class Fit(object):
             test_statistic = test_statistic.reshape(spectrum._data.shape)
 
         return test_statistic, total_penalty
+
+    def _funct_root(self, npar, gin, chisq, args, iflag):
+        """ Callable to pass to minimiser.
+
+        Args:
+          args (list): List of fit parameter values to test in the
+            current iteration.
+
+        Returns:
+          tuple: containing:
+
+            :class:`numpy.ndrray`: Values of the test statistic given
+              the current values of the fit parameters.
+            float: Total penalty term to be applied to the test
+              statistic.
+
+        Raises:
+          ValueError: If :attr:`_floating_backgrounds` is None. This
+            method requires at least one floating background.
+          ParameterError: If it is attempted to load a pre-made spectrum
+            after other fit parameters have been applied to the spectrum.
+
+        .. note:: This method should not be called directly, it is
+          intended to be passed to an appropriate minimiser and
+          called from within the minimisation algorithm.
+
+        .. note:: This method should not be used if there are no
+          floating backgrounds.
+
+        """
+        global ncount
+        if not ncount:
+            raise ValueError("global var: ncount has not been initiated "
+                             "before fitting")
+        if self._floating_backgrounds is None:
+            raise ValueError("The _funct method can only be used " +
+                             "with at least one floating background")
+
+        # Update parameter current values
+        print "args: ", args, len(args)
+        for i, par in enumerate(self._fit_config.get_pars()):
+            print i, args[i]
+            par = self._fit_config.get_par(par)
+            print par._name
+            par.set_current_value(args[i])
+
+        # Loop over all floating backgrounds
+        observed = self._data.nd_project(self._data_pars)
+        if self._fixed_background:
+            expected = self._fixed_background.nd_project(self._fixed_pars)
+        else:
+            expected = None
+        global_pars = self._fit_config.get_global_pars()
+        cur_val = ""
+        for parameter in global_pars:
+            cur_val += parameter._name + str(parameter._current_value) + "_"
+        for spectrum, floating_pars in zip(self._floating_backgrounds,
+                                           self._floating_pars):
+            # Apply global parameters first
+            if global_pars:
+                background_name = spectrum.get_background_name()
+                if background_name not in self._global_dict:
+                    self._global_dict[background_name] = {}
+                if cur_val not in self._global_dict[background_name]:
+                    fit_config = spectrum._fit_config
+                    applied = False
+                    load = False
+                    load_pars = []
+                    for parameter in global_pars:
+                        if parameter._pre_made:
+                            continue
+                        spectrum = parameter.apply_to(spectrum)
+                    spectrum._fit_config = fit_config
+                    # Shrink to roi
+                    self.shrink_to_data(spectrum)
+                    # rebin
+                    spectrum.rebin(self._data._data.shape)
+                    self._global_dict[background_name][cur_val] = spectrum
+                else:
+                    spectrum = self._global_dict[background_name][cur_val]
+
+            # Apply spectrum-specific parameters
+            if spectrum._fit_config:
+                for par_name in spectrum._fit_config.get_pars():
+                    parameter = spectrum._fit_config.get_par(par_name)
+                    spectrum = parameter.apply_to(spectrum)
+
+            # Spectrum should now be fully convolved/scaled
+            if expected is not None:
+                expected += spectrum.nd_project(floating_pars)
+            else:
+                expected = spectrum.nd_project(floating_pars)
+
+        # Add signal, if required
+        if self._signal:
+            if global_pars:
+                num_decays = self._signal._num_decays
+                background_name = self._signal.get_background_name()
+                if background_name not in self._global_dict:
+                    self._global_dict[background_name] = {}
+                if cur_val not in self._global_dict[background_name]:
+                    fit_config = self._signal._fit_config
+                    signal = None
+                    for parameter in global_pars:
+                        if parameter._pre_made:
+                            continue
+                        if signal:
+                            signal = parameter.apply_to(signal)
+                        else:
+                            signal = parameter.apply_to(self._signal)
+                    signal._fit_config = fit_config
+                    self.shrink_to_data(signal)
+                    signal.rebin(self._data._data.shape)
+                    self._global_dict[background_name][cur_val] = signal
+                else:
+                    signal = self._global_dict[background_name][cur_val]
+                signal.scale(num_decays)
+            else:
+                signal = self._signal
+            expected += signal.nd_project(self._signal_pars)
+
+        # If single bin - sum over expected and observed
+        if self._single_bin:
+            expected = numpy.sum(expected)
+            observed = numpy.sum(observed)
+
+        # Calculate value of test statistic
+        test_statistic = self._test_statistic.compute_statistic(
+            observed.ravel(), expected.ravel())
+
+        # Add penalty terms
+        total_penalty = 0.
+        for parameter in self._fit_config.get_pars():
+            par = self._fit_config.get_par(parameter)
+            current_value = par.get_current_value()
+            prior = par.get_prior()
+            sigma = par.get_sigma()
+            # If sigma is explicitly None add no penalty term
+            if (sigma is not None):
+                total_penalty += self._test_statistic.get_penalty_term(
+                    current_value, prior, sigma)
+
+        # Check for per_bin flag
+        if self._per_bin:
+            test_statistic = test_statistic.reshape(spectrum._data.shape)
+
+        chisq[0] = test_statistic + total_penalty
+        ncount += 1
 
     def load_pre_made(self, spectrum, global_pars):
         """ Load pre-made convolved spectra.
