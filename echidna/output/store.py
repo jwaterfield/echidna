@@ -107,6 +107,8 @@ def dump(file_path, spectrum, append=False, overwrite=False):
                 spectrum.get_fit_config().dump())
         group.attrs["num_decays"] = spectrum.get_num_decays()
         group.attrs["raw_events"] = spectrum._raw_events
+        if hasattr(spectrum, '_orig_num_decays'):
+            group.attrs["orig_num_decays"] = spectrum._orig_num_decays
         group.attrs["bipo"] = spectrum.get_bipo()
         if len(spectrum.get_style()) == 0:
             group.attrs["style"] = ""
@@ -299,7 +301,10 @@ def load(file_path):
                 spec._rois = json.loads(
                     rois_dict, object_pairs_hook=OrderedDict)
             # else the default values of Spectra __init__ are kept
-
+            try:
+                spec._orig_num_decays = group.attrs["orig_num_decays"]
+            except:
+                pass
             spec._data = group["data"].value
             spec._location = file_path
         _logger.info("Loaded spectrum %s" % spec.get_name())

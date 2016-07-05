@@ -179,6 +179,8 @@ class Limit(object):
                 for par_name, value in results_summary.iteritems():
                     self._limit_results.set_best_fit(i, value.get("best_fit"),
                                                      par_name)
+                    self._limit_results.set_best_fit_err(
+                        i, value.get("best_fit_err"), par_name)
                     self._limit_results.set_penalty_term(
                         i, value.get("penalty_term"), par_name)
                 if store_fits:

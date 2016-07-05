@@ -171,6 +171,7 @@ class FitParameter(Parameter):
       logscale_deviation (bool, optional): Flag to create a logscale deviation
         array of values rather than a linear or logscale array.
 
+
     Attributes:
       _prior (float): The prior of the parameter
       _sigma (float): The sigma of the parameter
@@ -194,7 +195,7 @@ class FitParameter(Parameter):
 
     def __init__(self, name, prior, sigma, low, high, bins, dimension=None,
                  values=None, step=None, current_value=None,
-                 penalty_term=None, best_fit=None, best_fit_error=0.,
+                 penalty_term=None, best_fit=None, best_fit_err=0.,
                  pre_made=False, logscale=None, base=numpy.e,
                  logscale_deviation=None):
         """Initialise FitParameter class
@@ -212,7 +213,7 @@ class FitParameter(Parameter):
         self._values = values
         self._current_value = current_value
         self._best_fit = best_fit
-        self._best_fit_error = best_fit_error
+        self._best_fit_err = best_fit_err
         self._penalty_term = penalty_term
         self._pre_made = pre_made
         self._logscale = None
@@ -307,6 +308,14 @@ class FitParameter(Parameter):
                              self._name + " has not been set")
         return self._best_fit
 
+    def get_best_fit_err(self):
+        """
+        Returns:
+          float: Error on best fit value of parameter - stored in
+            :attr:`_best_fit_err`.
+        """
+        return self._best_fit_err
+
     def get_bin(self, value):
         """ Get bin for value of parameter.
 
@@ -377,10 +386,10 @@ class FitParameter(Parameter):
         """
         return self._best_fit
 
-    def get_best_fit_error(self):
+    def get_best_fit_err(self):
         """
         """
-        return self._best_fit_error
+        return self._best_fit_err
 
     def get_current_value(self):
         """
@@ -540,13 +549,13 @@ class FitParameter(Parameter):
         """
         self._best_fit = best_fit
 
-    def set_best_fit_error(self, best_fit_error):
-        """ Set value for :attr:`_best_fit_error`.
+    def set_best_fit_err(self, best_fit_err):
+        """ Set value for :attr:`_best_fit_err`.
 
         Args:
-          best_fit_error (float): Best fit value for parameter
+          best_fit_err (float): Error on best fit value for parameter
         """
-        self._best_fit_error = best_fit_error
+        self._best_fit_err = best_fit_err
 
     def set_current_value(self, value):
         """ Set value for :attr:`_current_value`.
@@ -653,7 +662,7 @@ class FitParameter(Parameter):
         # Add non-basic attributes
         parameter_dict["current_value"] = self._current_value
         parameter_dict["best_fit"] = self._best_fit
-        parameter_dict["best_fit_error"] = self._best_fit_error
+        parameter_dict["best_fit_err"] = self._best_fit_err
         parameter_dict["penalty_term"] = self._best_fit
         return parameter_dict
 
@@ -730,7 +739,7 @@ class ResolutionParameter(FitParameter):
         super(ResolutionParameter, self).__init__(
             name, prior, sigma, low, high, bins, dimension, **kwargs)
 
-    def apply_to(self, spectrum):
+    def apply_to(self, spectra, res_key):
         """ Smears spectrum to current value of resolution.
 
         Args:
@@ -745,16 +754,13 @@ class ResolutionParameter(FitParameter):
         if self._current_value is None:
             raise ValueError("Current value of rate parameter %s "
                              "has not been set" % self._name)
-        cur_value = self._current_value
-        if cur_value > 10.:
-            smearer = smear.EnergySmearLY()
-        else:
-            smearer = smear.EnergySmearRes()
-        smearer.set_resolution(self._current_value)
-        spectrum = smearer.weighted_smear(spectrum, self._dimension)
+        smearer = smear.EnergySmearLY()
+        spectrum = smearer.interpolate(spectra, res_key, self._current_value,
+                                       3)
         return spectrum
 
-    def get_pre_convolved(self, directory, filename, added_dim=False):
+    def get_pre_convolved(self, directory, filename, added_dim=False,
+                          cur_val=None):
         """ Constructs the filename and directory from which a pre_convolved
           spectrum can be loaded from.
 
@@ -791,9 +797,11 @@ class ResolutionParameter(FitParameter):
         Raises:
           ValueError: If :attr:`_current_value` is not set.
         """
-        if self._current_value is None:
+        if self._current_value is None and cur_val is None:
             raise ValueError("Current value of fit parameter %s "
                              "has not been set" % self._name)
+        if cur_val is None:
+            cur_val = self._current_value
 
         if directory[-1] != '/':
             directory += '/'
@@ -805,13 +813,14 @@ class ResolutionParameter(FitParameter):
                 directory += 'smear/'
         else:
             directory += 'smear/'
-        if self._current_value > 10.:
+        if cur_val > 10.:
             ext = 'ly'
         else:
             ext = 'rs'
-        value_string = str(self._current_value)
+        value_string = str(cur_val)
         # Strip trailling zero in filename
-        value_string = value_string.rstrip('0').rstrip('.')
+        if '.' in value_string:
+            value_string = value_string.rstrip('0').rstrip('.')
         filename_list = filename.split('_')
         temp_fname = ''
         subbed = False
@@ -872,7 +881,8 @@ class ScaleParameter(FitParameter):
         scaler.set_scale_factor(self._current_value)
         return scaler.scale(spectrum, self._dimension)
 
-    def get_pre_convolved(self, directory, filename, added_dim=False):
+    def get_pre_convolved(self, directory, filename, added_dim=False,
+                          cur_val=None):
         """ Constructs the filename and directory from which a pre_convolved
           spectrum can be loaded from.
 
@@ -909,10 +919,11 @@ class ScaleParameter(FitParameter):
         Raises:
           ValueError: If :attr:`_current_value` is not set.
         """
-        if self._current_value is None:
+        if self._current_value is None and cur_val is None:
             raise ValueError("Current value of fit parameter %s "
                              "has not been set" % self._name)
-
+        if cur_val is None:
+            cur_val = self._current_value
         if directory[-1] != '/':
             directory += '/'
         if not added_dim:
@@ -923,9 +934,10 @@ class ScaleParameter(FitParameter):
                 directory += 'scale/'
         else:
             directory += 'scale/'
-        value_string = str(self._current_value)
+        value_string = str(cur_val)
         # Strip trailling zero in filename
-        value_string = value_string.rstrip('0').rstrip('.')
+        if '.' in value_string:
+            value_string = value_string.rstrip('0').rstrip('.')
         filename_list = filename.split('_')
         temp_fname = ''
         subbed = False
@@ -986,7 +998,8 @@ class ShiftParameter(FitParameter):
         shifter.set_shift(self._current_value)
         return shifter.shift(spectrum, self._dimension)
 
-    def get_pre_convolved(self, directory, filename, added_dim=False):
+    def get_pre_convolved(self, directory, filename, added_dim=False,
+                          cur_val=None):
         """ Constructs the filename and directory from which a pre_convolved
           spectrum can be loaded from.
 
@@ -1023,10 +1036,11 @@ class ShiftParameter(FitParameter):
         Raises:
           ValueError: If :attr:`_current_value` is not set.
         """
-        if self._current_value is None:
+        if self._current_value is None and cur_val is None:
             raise ValueError("Current value of fit parameter %s "
                              "has not been set" % self._name)
-
+        if cur_val is None:
+            cur_val = self._current_value
         if directory[-1] != '/':
             directory += '/'
         if not added_dim:
@@ -1037,9 +1051,10 @@ class ShiftParameter(FitParameter):
                 directory += 'shift/'
         else:
             directory += 'shift/'
-        value_string = str(self._current_value)
+        value_string = str(cur_val)
         # Strip trailling zero in filename
-        value_string = value_string.rstrip('0').rstrip('.')
+        if '.' in value_string:
+            value_string = value_string.rstrip('0').rstrip('.')
         filename_list = filename.split('_')
         temp_fname = ''
         subbed = False

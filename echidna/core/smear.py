@@ -13,6 +13,7 @@ Examples:
 import numpy
 import itertools
 import copy
+from scipy import interpolate
 
 
 class Smear(object):
@@ -101,6 +102,31 @@ class Smear(object):
         low = mean - self._num_sigma*sigma
         high = mean + self._num_sigma*sigma
         return low, high
+
+    def interpolate(self, spectra, res_key, value, k):
+        """
+        """
+        x = []
+        for spec in spectra:
+            x.append(float(spec._name.split(res_key)[-1].split('_')[0]))
+        bins = []
+        for par_name in spectra[0].get_config().get_pars():
+            bins.append(range(spectra[0].get_config().get_par(par_name)._bins))
+        smeared_spec = copy.deepcopy(spectra[0])
+        name = spectra[0]._name.split(res_key)[0] + res_key + str(value) + "_"
+        for string in spectra[0]._name.split(res_key)[-1].split('_'):
+            name += string + "_"
+        name = name[:-1]
+        smeared_spec._name = name
+        smeared_spec._data = numpy.zeros(spectra[0]._data.shape)
+        for bin in itertools.product(*bins):
+            y = []
+            for spec in spectra:
+                y.append(spec._data[bin])
+            interp = interpolate.InterpolatedUnivariateSpline(x, y, k=k)
+            weight = interp(value)
+            smeared_spec._data[bin] = weight
+        return smeared_spec
 
 
 class EnergySmearLY(Smear):

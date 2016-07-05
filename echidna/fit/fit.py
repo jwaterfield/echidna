@@ -10,6 +10,8 @@ import os
 import yaml
 import copy
 
+ncount = 0
+
 
 class Fit(object):
     """ Class to handle fitting.
@@ -652,19 +654,14 @@ class Fit(object):
 
         """
         global ncount
-        if not ncount:
-            raise ValueError("global var: ncount has not been initiated "
-                             "before fitting")
         if self._floating_backgrounds is None:
             raise ValueError("The _funct method can only be used " +
                              "with at least one floating background")
 
         # Update parameter current values
-        print "args: ", args, len(args)
         for i, par in enumerate(self._fit_config.get_pars()):
-            print i, args[i]
             par = self._fit_config.get_par(par)
-            print par._name
+            print par._name, i, args[i]
             par.set_current_value(args[i])
 
         # Loop over all floating backgrounds
@@ -681,27 +678,65 @@ class Fit(object):
                                            self._floating_pars):
             # Apply global parameters first
             if global_pars:
-                background_name = spectrum.get_background_name()
-                if background_name not in self._global_dict:
-                    self._global_dict[background_name] = {}
-                if cur_val not in self._global_dict[background_name]:
-                    fit_config = spectrum._fit_config
-                    applied = False
-                    load = False
-                    load_pars = []
-                    for parameter in global_pars:
-                        if parameter._pre_made:
-                            continue
+                fit_config = spectrum._fit_config
+                bkgnd_name = spectrum.get_background_name()
+                i = 0
+                for parameter in global_pars:
+                    if parameter._pre_made:
+                        continue
+                    if 'resolution' in parameter._name:
+                        if i != 0:
+                            raise ParameterError("Resolution must be first "
+                                                 "global systematic.")
+                        spectra = []
+                        # Working for ly not % resolution:
+                        int_val = int(parameter._current_value)
+                        num_decays = spectrum._num_decays
+                        if float(int_val) == parameter._current_value:
+                            if bkgnd_name not in self._global_dict:
+                                self._global_dict[bkgnd_name] = {}
+                            if int_val not in\
+                                    self._global_dict[bkgnd_name]:
+                                spectrum = self.load_pre_made(spectrum,
+                                                              [parameter],
+                                                              cur_val=int_val)
+                                self.shrink_to_data(spectrum)
+                                spectrum.rebin(self._data._data.shape)
+                                spectrum.scale(num_decays)
+                                self._global_dict[bkgnd_name][str(int_val)] =\
+                                    spectrum
+                            else:
+                                spectrum =\
+                                    self._global_dict[bkgnd_name][str(int_val)]
+                        else:
+                            for ly_idx in range(4):
+                                str_int = str(int_val + ly_idx - 2)
+                                if bkgnd_name not in self._global_dict:
+                                    self._global_dict[bkgnd_name] = {}
+                                if str_int not in \
+                                        self._global_dict[bkgnd_name]:
+                                    spectrum = self.load_pre_made(
+                                        spectrum, [parameter],
+                                        cur_val=str_int)
+                                    self.shrink_to_data(spectrum)
+                                    spectrum.rebin(self._data._data.shape)
+                                    spectrum.scale(num_decays)
+                                    spectra.append(spectrum)
+                                    self._global_dict[bkgnd_name][str_int] =\
+                                        spectrum
+                                else:
+                                    spectra.append(
+                                        self._global_dict[bkgnd_name][str_int])
+                            spectrum = parameter.apply_to(
+                                spectra, parameter._name.split('_')[-1])
+                    else:
                         spectrum = parameter.apply_to(spectrum)
-                    spectrum._fit_config = fit_config
-                    # Shrink to roi
-                    self.shrink_to_data(spectrum)
-                    # rebin
-                    spectrum.rebin(self._data._data.shape)
-                    self._global_dict[background_name][cur_val] = spectrum
-                else:
-                    spectrum = self._global_dict[background_name][cur_val]
-
+                        spectrum._fit_config = fit_config
+                        # Shrink to roi
+                        self.shrink_to_data(spectrum)
+                        # rebin
+                        spectrum.rebin(self._data._data.shape)
+                    i += 1
             # Apply spectrum-specific parameters
             if spectrum._fit_config:
                 for par_name in spectrum._fit_config.get_pars():
@@ -713,30 +748,76 @@ class Fit(object):
                 expected += spectrum.nd_project(floating_pars)
             else:
                 expected = spectrum.nd_project(floating_pars)
-
         # Add signal, if required
         if self._signal:
             if global_pars:
                 num_decays = self._signal._num_decays
-                background_name = self._signal.get_background_name()
-                if background_name not in self._global_dict:
-                    self._global_dict[background_name] = {}
-                if cur_val not in self._global_dict[background_name]:
-                    fit_config = self._signal._fit_config
-                    signal = None
-                    for parameter in global_pars:
-                        if parameter._pre_made:
-                            continue
+                bkgnd_name = self._signal.get_background_name()
+                fit_config = self._signal._fit_config
+                signal = None
+                i = 0
+                for parameter in global_pars:
+                    if parameter._pre_made:
+                        continue
+                    if 'resolution' in parameter._name:
+                        if i != 0:
+                            raise ParameterError("Resolution must be first "
+                                                 "global systematic.")
+                        spectra = []
+                        # Working for ly not % resolution:
+                        int_val = int(parameter._current_value)
+                        num_decays = self._signal._num_decays
+                        if float(int_val) == parameter._current_value:
+                            if bkgnd_name not in self._global_dict:
+                                self._global_dict[bkgnd_name] = {}
+                            if int_val not in\
+                                    self._global_dict[bkgnd_name]:
+                                signal = self.load_pre_made(self._signal,
+                                                            [parameter],
+                                                            cur_val=int_val)
+                                self.shrink_to_data(signal)
+                                signal.rebin(self._data._data.shape)
+                                signal.scale(num_decays)
+                                self._global_dict[bkgnd_name][str(int_val)] =\
+                                    signal
+                            else:
+                                signal =\
+                                    self._global_dict[bkgnd_name][str(int_val)]
+                        else:
+                            for ly_idx in range(4):
+                                str_int = str(int_val + ly_idx - 2)
+                                if bkgnd_name not in self._global_dict:
+                                    self._global_dict[bkgnd_name] = {}
+                                if str_int not in \
+                                        self._global_dict[bkgnd_name]:
+                                    spectrum = self.load_pre_made(
+                                        self._signal, [parameter],
+                                        cur_val=str_int)
+                                    self.shrink_to_data(spectrum)
+                                    spectrum.rebin(self._data._data.shape)
+                                    spectrum.scale(num_decays)
+                                    spectra.append(spectrum)
+                                    self._global_dict[bkgnd_name][str_int] =\
+                                        spectrum
+                                else:
+                                    spectra.append(
+                                        self._global_dict[bkgnd_name][str_int])
+                            signal = parameter.apply_to(
+                                spectra, parameter._name.split('_')[-1])
+                    else:
                         if signal:
                             signal = parameter.apply_to(signal)
                         else:
                             signal = parameter.apply_to(self._signal)
+                        signal._fit_config = signal
+                        # Shrink to roi
+                        self.shrink_to_data(signal)
+                        # rebin
+                        spectrum.rebin(self._data._data.shape)
                     signal._fit_config = fit_config
                     self.shrink_to_data(signal)
                     signal.rebin(self._data._data.shape)
-                    self._global_dict[background_name][cur_val] = signal
-                else:
-                    signal = self._global_dict[background_name][cur_val]
+                    i += 1
                 signal.scale(num_decays)
             else:
                 signal = self._signal
@@ -770,7 +851,7 @@ class Fit(object):
         chisq[0] = test_statistic + total_penalty
         ncount += 1
 
-    def load_pre_made(self, spectrum, global_pars):
+    def load_pre_made(self, spectrum, global_pars, cur_val=None):
         """ Load pre-made convolved spectra.
 
         This method is used to load a pre-made spectra convolved with
@@ -804,7 +885,8 @@ class Fit(object):
                 added_dim = True
                 directory += dim + '/'
             directory, filename = par.get_pre_convolved(directory, filename,
-                                                        added_dim)
+                                                        added_dim,
+                                                        cur_val=cur_val)
         # Load spectrum from hdf5
         num_decays = spectrum._num_decays
         fit_config = spectrum._fit_config

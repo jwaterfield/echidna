@@ -442,7 +442,7 @@ class GlobalFitConfig(Config):
         for dim in global_config[main_key]:
             for syst in global_config[main_key][dim]:
                 name = dim + "_" + syst
-                if syst == 'resolution' or syst == 'resolution_ly':
+                if syst == 'resolution_%' or syst == 'resolution_ly':
                     parameters[name] = {
                         'par': ResolutionParameter(
                             name, dimension=dim,

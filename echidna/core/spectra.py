@@ -136,6 +136,11 @@ class Spectra(object):
         self._data += spectrum._data
         self._raw_events += spectrum._raw_events
         self._num_decays += spectrum._num_decays
+        if hasattr(self, '_orig_num_decays'):
+            if hasattr(spectrum, '_orig_num_decays'):
+                self._orig_num_decays += spectrum._orig_num_decays
+        elif hasattr(spectrum, '_orig_num_decays'):
+            self._orig_num_decays = spectrum._orig_num_decays
 
     def cut(self, **kwargs):
         """ Similar to :meth:`shrink`, but updates scaling information.
