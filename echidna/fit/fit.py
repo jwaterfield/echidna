@@ -43,8 +43,8 @@ class Fit(object):
         the ROI.
       minimiser (:class:`echidna.limit.minimiser.Minimiser`, optional): Object
         to handle the minimisation.
-      pre_made_dir (string, optional): Directory in which pre-made convolved
-        spectra are stored.
+      pre_made_base_dir (string, optional): Directory in which pre-made
+        convolved spectra are stored.
       single_bin (bool, optional): Flag for a single bin fit (e.g. simple
         counting experiment).
       per_bin (bool, optional): Flag to monitor values of test
@@ -628,16 +628,14 @@ class Fit(object):
         """ Callable to pass to minimiser.
 
         Args:
-          args (list): List of fit parameter values to test in the
-            current iteration.
+          npar (int): Number of parameters you are minimising.
+          gin (list): Gradient of paramters you are minimising.
+          chisq (float): The test statistic you are minimising.
+          args (list): Contains the parameters you are minimising.
+          iflag (int): Denotes various ROOT error states.
 
         Returns:
-          tuple: containing:
-
-            :class:`numpy.ndrray`: Values of the test statistic given
-              the current values of the fit parameters.
-            float: Total penalty term to be applied to the test
-              statistic.
+          float: The test statistic you are minimising.
 
         Raises:
           ValueError: If :attr:`_floating_backgrounds` is None. This
@@ -695,13 +693,11 @@ class Fit(object):
                         if float(int_val) == parameter._current_value:
                             if bkgnd_name not in self._global_dict:
                                 self._global_dict[bkgnd_name] = {}
-                            if int_val not in\
+                            if str(int_val) not in\
                                     self._global_dict[bkgnd_name]:
                                 spectrum = self.load_pre_made(spectrum,
                                                               [parameter],
                                                               cur_val=int_val)
-                                self.shrink_to_data(spectrum)
-                                spectrum.rebin(self._data._data.shape)
                                 spectrum.scale(num_decays)
                                 self._global_dict[bkgnd_name][str(int_val)] =\
                                     spectrum
@@ -715,15 +711,14 @@ class Fit(object):
                                     self._global_dict[bkgnd_name] = {}
                                 if str_int not in \
                                         self._global_dict[bkgnd_name]:
-                                    spectrum = self.load_pre_made(
+                                    spec = self.load_pre_made(
                                         spectrum, [parameter],
                                         cur_val=str_int)
-                                    self.shrink_to_data(spectrum)
-                                    spectrum.rebin(self._data._data.shape)
-                                    spectrum.scale(num_decays)
-                                    spectra.append(spectrum)
-                                    self._global_dict[bkgnd_name][str_int] =\
-                                        spectrum
+                                    if spec:
+                                        spec.scale(num_decays)
+                                        spectra.append(spec)
+                                        self._global_dict[bkgnd_name][str_int]\
+                                            = spec
                                 else:
                                     spectra.append(
                                         self._global_dict[bkgnd_name][str_int])
@@ -731,12 +726,13 @@ class Fit(object):
                                 spectra, parameter._name.split('_')[-1])
                     else:
                         spectrum = parameter.apply_to(spectrum)
-                        spectrum._fit_config = fit_config
-                        # Shrink to roi
-                        self.shrink_to_data(spectrum)
-                        # rebin
-                        spectrum.rebin(self._data._data.shape)
                     i += 1
+                spectrum._fit_config = fit_config
+                # Shrink to roi
+                self.shrink_to_data(spectrum)
+                # rebin
+                spectrum.rebin(self._data._data.shape)
+                spectrum.scale(num_decays)
             # Apply spectrum-specific parameters
             if spectrum._fit_config:
                 for par_name in spectrum._fit_config.get_pars():
@@ -770,13 +766,11 @@ class Fit(object):
                         if float(int_val) == parameter._current_value:
                             if bkgnd_name not in self._global_dict:
                                 self._global_dict[bkgnd_name] = {}
-                            if int_val not in\
+                            if str(int_val) not in\
                                     self._global_dict[bkgnd_name]:
                                 signal = self.load_pre_made(self._signal,
                                                             [parameter],
                                                             cur_val=int_val)
-                                self.shrink_to_data(signal)
-                                signal.rebin(self._data._data.shape)
                                 signal.scale(num_decays)
                                 self._global_dict[bkgnd_name][str(int_val)] =\
                                     signal
@@ -793,12 +787,11 @@ class Fit(object):
                                     spectrum = self.load_pre_made(
                                         self._signal, [parameter],
                                         cur_val=str_int)
-                                    self.shrink_to_data(spectrum)
-                                    spectrum.rebin(self._data._data.shape)
-                                    spectrum.scale(num_decays)
-                                    spectra.append(spectrum)
-                                    self._global_dict[bkgnd_name][str_int] =\
-                                        spectrum
+                                    if spectrum:
+                                        spectrum.scale(num_decays)
+                                        spectra.append(spectrum)
+                                        self._global_dict[bkgnd_name][str_int]\
+                                            = spectrum
                                 else:
                                     spectra.append(
                                         self._global_dict[bkgnd_name][str_int])
@@ -809,15 +802,10 @@ class Fit(object):
                             signal = parameter.apply_to(signal)
                         else:
                             signal = parameter.apply_to(self._signal)
-                        signal._fit_config = signal
-                        # Shrink to roi
-                        self.shrink_to_data(signal)
-                        # rebin
-                        spectrum.rebin(self._data._data.shape)
-                    signal._fit_config = fit_config
-                    self.shrink_to_data(signal)
-                    signal.rebin(self._data._data.shape)
                     i += 1
+                signal._fit_config = fit_config
+                self.shrink_to_data(signal)
+                signal.rebin(self._data._data.shape)
                 signal.scale(num_decays)
             else:
                 signal = self._signal
@@ -864,6 +852,9 @@ class Fit(object):
         Args:
           spectrum (:class:`echidna.core.spectra.Spectra`): Spectrum
             to convolve.
+          global_pars (list): Of global parameters that you want to pre load.
+          cur_val (float, optional): To overwrite the current value stored in
+            the parameter.
 
         Returns:
           (:class:`echidna.core.spectra.Spectra`): Convolved spectrum,
@@ -893,7 +884,10 @@ class Fit(object):
         orig_num_decays = None
         if hasattr(spectrum, '_orig_num_decays'):
             orig_num_decays = spectrum._orig_num_decays
-        spectrum = store.load(directory + filename)
+        if os.path.exists(directory + filename):
+            spectrum = store.load(directory + filename)
+        else:
+            return
         if orig_num_decays:
             spectrum._num_decays = orig_num_decays
         spectrum.scale(num_decays)

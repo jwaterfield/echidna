@@ -381,16 +381,6 @@ class FitParameter(Parameter):
                                                       self._bins + 1)
         return self._bin_boundaries
 
-    def get_best_fit(self):
-        """
-        """
-        return self._best_fit
-
-    def get_best_fit_err(self):
-        """
-        """
-        return self._best_fit_err
-
     def get_current_value(self):
         """
         Returns:
@@ -744,6 +734,8 @@ class ResolutionParameter(FitParameter):
 
         Args:
           spectrum (:class:`Spectra`): Spectrum which should be smeared.
+          res_key (str): The string which denotes the type of resolution par
+            e.g. 'ly' for light yield.
 
         Returns:
           (:class:`Spectra`): Smeared spectrum.
@@ -787,6 +779,8 @@ class ResolutionParameter(FitParameter):
             object
           added_dim (bool, optional): If a dimension has just been added to the
             directory then this flag is True.
+          cur_val (float, optional): Overwrites the current value stored in 
+            :attr:`_current_value`.
 
         Returns:
           string: Directory containing pre-convolved :class:`Spectra`,
@@ -915,6 +909,8 @@ class ScaleParameter(FitParameter):
             appended with name of this :class:`FitParameter`
           string: Name of pre-convolved :class:`Spectra`, appended with
             current value of this :class:`FitParameter`
+          cur_val (float, optional): Overwrites the current value stored in 
+            :attr:`_current_value`.
 
         Raises:
           ValueError: If :attr:`_current_value` is not set.
@@ -1026,6 +1022,8 @@ class ShiftParameter(FitParameter):
             object
           added_dim (bool, optional): If a dimension has just been added to the
             directory then this flag is True.
+          cur_val (float, optional): Overwrites the current value stored in 
+            :attr:`_current_value`.
 
         Returns:
           string: Directory containing pre-convolved :class:`Spectra`,

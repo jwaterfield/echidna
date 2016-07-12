@@ -104,11 +104,26 @@ class Smear(object):
         return low, high
 
     def interpolate(self, spectra, res_key, value, k):
-        """
+        """ Interpolates between a list of spectra to obtain a new smeared
+          spectrum at a given value.
+
+        Args:
+          spectra (list): Of spectrum at different resolutions you wish to
+            interpolate between.
+          res_key (str): Denotes the type of resolution par. e.g. 'ly' denotes
+            light yield.
+          value (float): The resolution value you wish to construct the
+            spectrum at.
+          k (int): Degree of smoothing of the spline. Must be <= 5.
+
+        Returns:
+          :class:`echidna.core.spectra.Spectra`: The smeared spectrum.
         """
         x = []
         for spec in spectra:
             x.append(float(spec._name.split(res_key)[-1].split('_')[0]))
+        if len(x) < 4.:
+            k = len(x) - 1
         bins = []
         for par_name in spectra[0].get_config().get_pars():
             bins.append(range(spectra[0].get_config().get_par(par_name)._bins))

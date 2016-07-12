@@ -701,7 +701,7 @@ class Minuit(FitResults, Minimiser):
     """ Uses ROOTs TMinuit minimiser
     """
     def __init__(self, fit_config, spectra_config, name=None, print_level=-1,
-                 strategy=1, iterations=500):
+                 strategy=1, iterations=5000):
         super(Minuit, self).__init__(fit_config, spectra_config, name=name)
         Minimiser.__init__(self, name, Minuit, per_bin=False)
         self._results = None
@@ -750,6 +750,7 @@ class Minuit(FitResults, Minimiser):
         arglist[0] = self._iterations
         minuit.mnexcm("MIGRAD", arglist, 1, ierflg)
         minuit.Migrad()
+        minuit.mnmnos()
         self._results = minuit
         for i, par_name in enumerate(self._fit_config.get_pars()):
             par = self._fit_config.get_par(par_name)
@@ -779,25 +780,3 @@ class Minuit(FitResults, Minimiser):
                       nfix_par_max, status)
         print "min:", float(func_min)
         return float(func_min)
-
-
-class MinuitPreLoad(FitResults, Minimiser):
-    """
-    """
-    def __init__(self, fit_config, spectra_config, name=None):
-        super(MinuitPreLoad, self).__init__(fit_config, spectra_config,
-                                            name=name)
-        Minimiser.__init__(self, name, Minuit, per_bin=False)
-
-    def minimise(self, funct, test_statistic):
-        """
-        """
-        npar = len(self._fit_config.get_pars())
-        minuit = TMinuit(npar - pre_made_cnt)
-        minuit.SetFCN(funct)
-        for i, par_name in enumerate(self._fit_config.get_pars()):
-            par = self._fit_config.get_par(par_name)
-            if par._pre_made:
-                minuit.mnparm(i, par_name, par._prior, par._step, par._low,
-                              par._high, Long(0))
-                minuit.FixParameter(i)

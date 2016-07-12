@@ -484,6 +484,12 @@ class GlobalFitConfig(Config):
         return cls(name, parameters)
 
     @classmethod
+    def load_blank(cls, name="global_fit_config"):
+        """Initialise an empty GlobalFitConfig
+        """
+        return cls(name, OrderedDict({}))
+
+    @classmethod
     def load_from_file(cls, filename, sf_filename=None, name=None):
         """Initialise GlobalFitConfig class from a config file (classmethod).
 
@@ -501,7 +507,6 @@ class GlobalFitConfig(Config):
             containing the parameters in the file called filename.
         """
         config = yaml_loader.ordered_load(open(filename, 'r'))
-        print config
         if sf_filename:
             spectral_fit_config = yaml_loader.ordered_load(
                 open(sf_filename, "r"))
