@@ -206,7 +206,6 @@ class Fit(object):
         if self._signal:
             if not self._signal_pars:
                 raise CompatibilityError("signal roi pars have not been set.")
-            self.check_spectra(self._signal)
 
         if self._floating_backgrounds:
             if not self._floating_pars:
@@ -527,7 +526,7 @@ class Fit(object):
                                                       load_pars)
                     spectrum._fit_config = fit_config
                     # Shrink to roi
-                    self.shrink_to_data(spectrum)
+                    self._data.shrink_to_self(spectrum)
                     # rebin
                     spectrum.rebin(self._data._data.shape)
                     self._global_dict[background_name][cur_val] = spectrum
@@ -587,7 +586,7 @@ class Fit(object):
                         signal = self.load_pre_made(self._signal,
                                                     load_pars)
                     signal._fit_config = fit_config
-                    self.shrink_to_data(signal)
+                    self._data.shrink_to_self(signal)
                     signal.rebin(self._data._data.shape)
                     self._global_dict[background_name][cur_val] = signal
                 else:
@@ -672,8 +671,11 @@ class Fit(object):
         cur_val = ""
         for parameter in global_pars:
             cur_val += parameter._name + str(parameter._current_value) + "_"
+        spec = None
         for spectrum, floating_pars in zip(self._floating_backgrounds,
                                            self._floating_pars):
+            print "Applying systs to", spectrum._name
+            spec = None
             # Apply global parameters first
             if global_pars:
                 fit_config = spectrum._fit_config
@@ -695,14 +697,16 @@ class Fit(object):
                                 self._global_dict[bkgnd_name] = {}
                             if str(int_val) not in\
                                     self._global_dict[bkgnd_name]:
-                                spectrum = self.load_pre_made(spectrum,
-                                                              [parameter],
-                                                              cur_val=int_val)
-                                spectrum.scale(num_decays)
+                                spec = self.load_pre_made(spectrum,
+                                                          [parameter],
+                                                          cur_val=int_val)
+                                spectrum.shrink_to_self(spec)
+                                spec.rebin(spectrum._data.shape)
+                                spec.scale(num_decays)
                                 self._global_dict[bkgnd_name][str(int_val)] =\
-                                    spectrum
+                                    spec
                             else:
-                                spectrum =\
+                                spec =\
                                     self._global_dict[bkgnd_name][str(int_val)]
                         else:
                             for ly_idx in range(4):
@@ -716,34 +720,42 @@ class Fit(object):
                                         cur_val=str_int)
                                     if spec:
                                         spec.scale(num_decays)
+                                        spectrum.shrink_to_self(spec)
+                                        spec.rebin(spectrum._data.shape)
                                         spectra.append(spec)
                                         self._global_dict[bkgnd_name][str_int]\
                                             = spec
                                 else:
                                     spectra.append(
                                         self._global_dict[bkgnd_name][str_int])
-                            spectrum = parameter.apply_to(
+                            spec = parameter.apply_to(
                                 spectra, parameter._name.split('_')[-1])
                     else:
-                        spectrum = parameter.apply_to(spectrum)
+                        if spec:
+                            spec = parameter.apply_to(spec)
+                        else:
+                            spec = paramter.apply_to(spectrum)
                     i += 1
-                spectrum._fit_config = fit_config
+                spec._fit_config = fit_config
                 # Shrink to roi
-                self.shrink_to_data(spectrum)
+                print "shrinking to roi"
+                self._data.shrink_to_self(spec)
                 # rebin
-                spectrum.rebin(self._data._data.shape)
-                spectrum.scale(num_decays)
+                spec.rebin(self._data._data.shape)
+                spec.scale(num_decays)
             # Apply spectrum-specific parameters
-            if spectrum._fit_config:
-                for par_name in spectrum._fit_config.get_pars():
-                    parameter = spectrum._fit_config.get_par(par_name)
-                    spectrum = parameter.apply_to(spectrum)
+            if not spec:
+                spec = spectrum
+            if spec._fit_config:
+                for par_name in spec._fit_config.get_pars():
+                    parameter = spec._fit_config.get_par(par_name)
+                    spec = parameter.apply_to(spec)
 
             # Spectrum should now be fully convolved/scaled
             if expected is not None:
-                expected += spectrum.nd_project(floating_pars)
+                expected += spec.nd_project(floating_pars)
             else:
-                expected = spectrum.nd_project(floating_pars)
+                expected = spec.nd_project(floating_pars)
         # Add signal, if required
         if self._signal:
             if global_pars:
@@ -751,7 +763,9 @@ class Fit(object):
                 bkgnd_name = self._signal.get_background_name()
                 fit_config = self._signal._fit_config
                 signal = None
+                spec = None
                 i = 0
+                print "Applying systs to signal"
                 for parameter in global_pars:
                     if parameter._pre_made:
                         continue
@@ -771,6 +785,10 @@ class Fit(object):
                                 signal = self.load_pre_made(self._signal,
                                                             [parameter],
                                                             cur_val=int_val)
+                                self._floating_backgrounds[0].\
+                                    shrink_to_self(signal)
+                                signal.rebin(
+                                    self._floating_backgrounds[0]._data.shape)
                                 signal.scale(num_decays)
                                 self._global_dict[bkgnd_name][str(int_val)] =\
                                     signal
@@ -784,14 +802,19 @@ class Fit(object):
                                     self._global_dict[bkgnd_name] = {}
                                 if str_int not in \
                                         self._global_dict[bkgnd_name]:
-                                    spectrum = self.load_pre_made(
+                                    spec = self.load_pre_made(
                                         self._signal, [parameter],
                                         cur_val=str_int)
-                                    if spectrum:
-                                        spectrum.scale(num_decays)
-                                        spectra.append(spectrum)
+                                    if spec:
+                                        spec.scale(num_decays)
+                                        self._floating_backgrounds[0].\
+                                            shrink_to_self(spec)
+                                        spec.rebin(
+                                            self._floating_backgrounds[0].
+                                            _data.shape)
+                                        spectra.append(spec)
                                         self._global_dict[bkgnd_name][str_int]\
-                                            = spectrum
+                                            = spec
                                 else:
                                     spectra.append(
                                         self._global_dict[bkgnd_name][str_int])
@@ -804,7 +827,8 @@ class Fit(object):
                             signal = parameter.apply_to(self._signal)
                     i += 1
                 signal._fit_config = fit_config
-                self.shrink_to_data(signal)
+                print "shrinking to roi"
+                self._data.shrink_to_self(signal)
                 signal.rebin(self._data._data.shape)
                 signal.scale(num_decays)
             else:
@@ -1065,13 +1089,13 @@ class Fit(object):
         self._logger.debug("Set _roi as %s" % str(roi))
         self._checked = False  # Must redo checks for a new roi
 
-    def set_signal(self, signal, shrink=True):
+    def set_signal(self, signal, shrink=False):
         """ Sets the signal you want to fit.
 
         Args:
           signal (:class:`echidna.core.spectra.Spectra`): The signal
             spectrum you want to fit.
-          shrink (bool, optional): If set to True (default)
+          shrink (bool, optional): If set to True
             :meth:`shrink` method is called on the spectra shrinking
             it to the ROI.
         """
@@ -1122,24 +1146,4 @@ class Fit(object):
             par_low = dim + "_" + dim_type + "_low"
             par_high = dim + "_" + dim_type + "_high"
             shrink[par_low], shrink[par_high] = self._roi[dim]
-        spectra.shrink(**shrink)
-
-    def shrink_to_data(self, spectra):
-        """ Shrinks the spectra used in the fit to the data.
-
-        Args:
-          spectra (:class:`echidna.core.spectra.Spectra`): Spectra you want to
-            shrink to the roi.
-        """
-        shrink = {}
-        for par_name in self._data.get_config().get_pars():
-            par = self._data.get_config().get_par(par_name)
-            low = par._low
-            high = par._high
-            dim = self._data.get_config().get_dim(par_name)
-            dim_type = spectra.get_config().get_dim_type(dim)
-            par_low = dim + "_" + dim_type + "_low"
-            par_high = dim + "_" + dim_type + "_high"
-            shrink[par_low] = low
-            shrink[par_high] = high
         spectra.shrink(**shrink)
