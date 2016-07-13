@@ -115,6 +115,7 @@ class Fit(object):
                                  "is required to run the fit.")
 
         self._global_dict = {}
+        self._prev_spectra = {}
 
         # Now all floating backgrounds are loaded, check fit par values
         for par in self.get_fit_config().get_spectra_pars():
@@ -655,10 +656,16 @@ class Fit(object):
             raise ValueError("The _funct method can only be used " +
                              "with at least one floating background")
 
+        global_pars = self._fit_config.get_global_pars()
+
         # Update parameter current values
+        use_prev = True
         for i, par in enumerate(self._fit_config.get_pars()):
             par = self._fit_config.get_par(par)
-            print par._name, i, args[i]
+            if par in global_pars:
+                if par._current_value != args[i]:
+                    use_prev = False
+            #print par._name, i, args[i]
             par.set_current_value(args[i])
 
         # Loop over all floating backgrounds
@@ -667,21 +674,24 @@ class Fit(object):
             expected = self._fixed_background.nd_project(self._fixed_pars)
         else:
             expected = None
-        global_pars = self._fit_config.get_global_pars()
         cur_val = ""
         for parameter in global_pars:
             cur_val += parameter._name + str(parameter._current_value) + "_"
         spec = None
         for spectrum, floating_pars in zip(self._floating_backgrounds,
                                            self._floating_pars):
-            print "Applying systs to", spectrum._name
+            #print "Applying systs to", spectrum._name
             spec = None
             # Apply global parameters first
             if global_pars:
                 fit_config = spectrum._fit_config
+                num_decays = spectrum._num_decays
                 bkgnd_name = spectrum.get_background_name()
                 i = 0
                 for parameter in global_pars:
+                    if use_prev:
+                        #print "global pars same, using previous spectra"
+                        break
                     if parameter._pre_made:
                         continue
                     if 'resolution' in parameter._name:
@@ -691,7 +701,6 @@ class Fit(object):
                         spectra = []
                         # Working for ly not % resolution:
                         int_val = int(parameter._current_value)
-                        num_decays = spectrum._num_decays
                         if float(int_val) == parameter._current_value:
                             if bkgnd_name not in self._global_dict:
                                 self._global_dict[bkgnd_name] = {}
@@ -736,9 +745,13 @@ class Fit(object):
                         else:
                             spec = paramter.apply_to(spectrum)
                     i += 1
+                if not spec:
+                    spec = self._prev_spectra[spectrum._name]
+                else:
+                    self._prev_spectra[spectrum._name] = spec
                 spec._fit_config = fit_config
                 # Shrink to roi
-                print "shrinking to roi"
+                #print "shrinking to roi"
                 self._data.shrink_to_self(spec)
                 # rebin
                 spec.rebin(self._data._data.shape)
@@ -765,8 +778,10 @@ class Fit(object):
                 signal = None
                 spec = None
                 i = 0
-                print "Applying systs to signal"
+                #print "Applying systs to signal"
                 for parameter in global_pars:
+                    if use_prev:
+                        break
                     if parameter._pre_made:
                         continue
                     if 'resolution' in parameter._name:
@@ -776,7 +791,6 @@ class Fit(object):
                         spectra = []
                         # Working for ly not % resolution:
                         int_val = int(parameter._current_value)
-                        num_decays = self._signal._num_decays
                         if float(int_val) == parameter._current_value:
                             if bkgnd_name not in self._global_dict:
                                 self._global_dict[bkgnd_name] = {}
@@ -826,8 +840,12 @@ class Fit(object):
                         else:
                             signal = parameter.apply_to(self._signal)
                     i += 1
+                if signal:
+                    self._prev_spectra[self._signal._name] = signal
+                else:
+                    signal = self._prev_spectra[self._signal._name]
                 signal._fit_config = fit_config
-                print "shrinking to roi"
+                #print "shrinking to roi"
                 self._data.shrink_to_self(signal)
                 signal.rebin(self._data._data.shape)
                 signal.scale(num_decays)
